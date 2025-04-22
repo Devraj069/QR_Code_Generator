@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QR Code Generator</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      background-color: #121212;
+      color: white;
+    }
+    .section-card {
+      background-color: #1f1f1f;
+      border-radius: 1rem;
+      padding: 1.5rem;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+      transition: all 0.3s ease-in-out;
+    }
+    .section-card:hover {
+      transform: translateY(-5px);
+    }
+    #qr-result {
+      margin-top: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-dark bg-dark shadow">
+    <div class="container-fluid justify-content-center">
+      <span class="navbar-brand mb-0 h1 text-center text-lg">QR Code Generator</span>
+    </div>
+  </nav>
+  
+  <% if (success && success.length > 0) { %>
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+      <%= success %>
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+  <% } %>
+  
+  <% if (error && error.length > 0) { %>
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+      <%= error %>
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+  <% } %>
+  
+
+  <div class="container my-5">
+    <!-- QR Generation Section -->
+    <div class="section-card mb-5">
+      <h2 class="text-xl font-semibold mb-4">Generate QR Code</h2>
+      <form method="POST" action="/generate">
+        <input type="text" name="qrtext" class="form-control mb-3" placeholder="Enter text or URL" required>
+        <button type="submit" class="btn btn-primary w-full">Generate</button>
+      </form>
+
+      <% if (typeof qrImage !== 'undefined' && qrImage) { %>
+        <div class="text-center mt-4">
+          <h5 class="mb-2">Your QR Code:</h5>
+          <img src="<%= qrImage %>" alt="QR Code" class="img-fluid rounded" />
+          <a href="<%= qrImage %>" download="qrcode.png" class="btn btn-success mt-3">Download QR Code</a>
+        </div>
+      <% } %>
+    </div>
+
+    <!-- QR Scanner Section -->
+    <div class="section-card">
+      <h2 class="text-xl font-semibold mb-4">Scan QR Code</h2>
+      <form action="/scan-image" method="POST" enctype="multipart/form-data">
+        <div class="mb-3">
+          <input type="file" name="qrimage" accept="image/*" class="form-control" required>
+        </div>
+        <button type="submit" class="btn btn-warning w-full">Scan from Image</button>
+      </form>
+
+      <div class="text-center my-4">
+        <button onclick="startScanner()" class="btn btn-outline-info">Scan with Camera</button>
+      </div>
+
+      <div id="reader" class="mx-auto" style="width: 300px;"></div>
+      <div id="qr-result" class="text-center text-green-400 font-bold"></div>
+
+      <% if (typeof result !== 'undefined' && result) { %>
+        <div class="alert alert-success mt-4">Scanned Result: <%= result %></div>
+      <% } %>
+    </div>
+  </div>
+
+  <!-- Include Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+  <script>
+    function startScanner() {
+      const html5QrCode = new Html5Qrcode("reader");
+      
+      // Start scanning
+      html5QrCode.start(
+        { facingMode: "environment" }, // Use rear camera
+        { fps: 10, qrbox: 250 }, // FPS and scanning box size
+        (decodedText, decodedResult) => {
+          document.getElementById("qr-result").innerText = `Scanned: ${decodedText}`;
+          html5QrCode.stop(); // Stop after scan is successful
+        },
+        (errorMessage) => {
+          console.warn(errorMessage); // Log any scanning errors
+        }
+      ).catch(err => {
+        console.error("Error starting the camera:", err); // Error handling
+      });
+    }
+  </script>
+</body>
+</html>

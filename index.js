@@ -1,39 +1,99 @@
 const express = require('express');
+const multer = require('multer');
 const path = require('path');
-const qrRoutes = require('./routes/qrRoutes');
-const session = require('express-session');
-const flash = require('connect-flash');
-
-
+const fs = require('fs');
+const { Html5QrcodeScanner } = require("html5-qrcode");
 const app = express();
+const port = process.env.PORT || 3000;
 
-// Middleware
-app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, 'public')));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
-// Session and Flash
-app.use(session({
-  secret: 'qr-secret',
-  resave: false,
-  saveUninitialized: true
-}));
-app.use(flash());
-
-// View Engine
+// Set view engine to EJS
 app.set('view engine', 'ejs');
-app.set('views', path.join(__dirname, 'views'));
+app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
 
-// Flash to locals
-app.use((req, res, next) => {
-  res.locals.success = req.flash('success');
-  res.locals.error = req.flash('error');
-  next();
+// Set up multer to use temporary storage in Vercel's /tmp folder
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    // Use Vercel's temporary folder for storing files
+    cb(null, '/tmp');
+  },
+  filename: (req, file, cb) => {
+    // Generate a unique filename based on the current timestamp
+    cb(null, Date.now() + path.extname(file.originalname));
+  },
 });
 
-// Routes
-app.use('/', qrRoutes);
+const upload = multer({ storage: storage });
 
-// Start server
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running at http://localhost:${PORT}`));
+// Routes
+
+// Home Route
+app.get('/', (req, res) => {
+  res.render('index', {
+    success: null,
+    error: null,
+    result: null,
+    qrImage: null,
+  });
+});
+
+// Generate QR Code Route
+app.post('/generate', (req, res) => {
+  const { qrtext } = req.body;
+
+  // Generate QR Code using a QR Code library (for simplicity, we're using the qrcode library)
+  const QRCode = require('qrcode');
+  QRCode.toDataURL(qrtext, (err, qrImage) => {
+    if (err) {
+      return res.render('index', { success: null, error: 'Error generating QR code', result: null, qrImage: null });
+    }
+    res.render('index', {
+      success: 'QR Code generated successfully!',
+      error: null,
+      result: null,
+      qrImage: qrImage,
+    });
+  });
+});
+
+// Upload and Scan Image Route
+app.post('/scan-image', upload.single('qrimage'), (req, res) => {
+  if (!req.file) {
+    return res.render('index', { success: null, error: 'No file uploaded', result: null, qrImage: null });
+  }
+
+  const filePath = `/tmp/${req.file.filename}`;
+  
+  // Add code here to scan the QR code from the uploaded image using the appropriate library (e.g. `qrcode-reader` or `jsqr`)
+  const QRCodeReader = require('qrcode-reader');
+  const Jimp = require('jimp');
+
+  Jimp.read(filePath, (err, image) => {
+    if (err) {
+      return res.render('index', { success: null, error: 'Error reading image file', result: null, qrImage: null });
+    }
+
+    const qr = new QRCodeReader();
+    qr.callback = (err, value) => {
+      if (err) {
+        return res.render('index', { success: null, error: 'Error scanning QR code', result: null, qrImage: null });
+      }
+      res.render('index', {
+        success: 'QR Code scanned successfully!',
+        error: null,
+        result: value.result,
+        qrImage: null,
+      });
+    };
+
+    qr.decode(image.bitmap);
+  });
+});
+
+// Serve Static Files (optional)
+app.use('/uploads', express.static('uploads'));
+
+// Start Server
+app.listen(port, () => {
+  console.log(`Server running on http://localhost:${port}`);
+});

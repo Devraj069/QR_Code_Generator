@@ -4,6 +4,7 @@ const qrRoutes = require('./routes/qrRoutes');
 const session = require('express-session');
 const flash = require('connect-flash');
 
+
 const app = express();
 
 // Middleware

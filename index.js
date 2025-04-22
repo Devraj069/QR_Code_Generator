@@ -1,3 +1,4 @@
+
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
@@ -90,8 +91,8 @@ app.post('/scan-image', upload.single('qrimage'), (req, res) => {
   });
 });
 
-// Serve Static Files (optional)
-app.use('/uploads', express.static('uploads'));
+// Serve Static Files from /tmp
+app.use('/tmp', express.static('/tmp')); // This allows serving files directly from the /tmp folder
 
 // Start Server
 app.listen(port, () => {

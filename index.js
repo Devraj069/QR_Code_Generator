@@ -1,9 +1,10 @@
-
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
-const fs = require('fs');
-const { Html5QrcodeScanner } = require("html5-qrcode");
+const axios = require('axios');
+const imageKit = require('imagekit');
+const QRCode = require('qrcode');
+const Jimp = require('jimp');
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -12,19 +13,16 @@ app.set('view engine', 'ejs');
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
-// Set up multer to use temporary storage in Vercel's /tmp folder
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    // Use Vercel's temporary folder for storing files
-    cb(null, '/tmp');
-  },
-  filename: (req, file, cb) => {
-    // Generate a unique filename based on the current timestamp
-    cb(null, Date.now() + path.extname(file.originalname));
-  },
-});
-
+// Set up multer to handle file uploads (in-memory storage)
+const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
+
+// ImageKit API Configuration (Replace with your credentials)
+const imageKitInstance = new imageKit({
+  publicKey: 'public_96Pj+aP4l4DR+7wFS15XsoT6J4A=',
+  privateKey: 'private_l6kKWodED4JJ56Tj4xhYlJJ13CQ=',
+  urlEndpoint: 'https://ik.imagekit.io/a6wgpzjy2', // Example: https://ik.imagekit.io/your_imagekit_id
+});
 
 // Routes
 
@@ -42,8 +40,7 @@ app.get('/', (req, res) => {
 app.post('/generate', (req, res) => {
   const { qrtext } = req.body;
 
-  // Generate QR Code using a QR Code library (for simplicity, we're using the qrcode library)
-  const QRCode = require('qrcode');
+  // Generate QR Code using a QR Code library
   QRCode.toDataURL(qrtext, (err, qrImage) => {
     if (err) {
       return res.render('index', { success: null, error: 'Error generating QR code', result: null, qrImage: null });
@@ -58,41 +55,52 @@ app.post('/generate', (req, res) => {
 });
 
 // Upload and Scan Image Route
-app.post('/scan-image', upload.single('qrimage'), (req, res) => {
+app.post('/scan-image', upload.single('qrimage'), async (req, res) => {
   if (!req.file) {
     return res.render('index', { success: null, error: 'No file uploaded', result: null, qrImage: null });
   }
 
-  const filePath = `/tmp/${req.file.filename}`;
-  
-  // Add code here to scan the QR code from the uploaded image using the appropriate library (e.g. `qrcode-reader` or `jsqr`)
-  const QRCodeReader = require('qrcode-reader');
-  const Jimp = require('jimp');
+  // Prepare file data for ImageKit.io
+  const fileBuffer = req.file.buffer;
+  const fileName = Date.now() + path.extname(req.file.originalname);
 
-  Jimp.read(filePath, (err, image) => {
-    if (err) {
-      return res.render('index', { success: null, error: 'Error reading image file', result: null, qrImage: null });
-    }
+  try {
+    // Upload image to ImageKit.io
+    const uploadResponse = await imageKitInstance.upload({
+      file: fileBuffer, // File buffer
+      fileName: fileName, // Name of the file
+      folder: '/uploads', // Optional folder path
+    });
 
-    const qr = new QRCodeReader();
-    qr.callback = (err, value) => {
+    const imageUrl = uploadResponse.url;
+
+    // Now, scan the uploaded QR code using Jimp and QRCodeReader
+    Jimp.read(uploadResponse.url, (err, image) => {
       if (err) {
-        return res.render('index', { success: null, error: 'Error scanning QR code', result: null, qrImage: null });
+        return res.render('index', { success: null, error: 'Error reading image file', result: null, qrImage: null });
       }
-      res.render('index', {
-        success: 'QR Code scanned successfully!',
-        error: null,
-        result: value.result,
-        qrImage: null,
-      });
-    };
 
-    qr.decode(image.bitmap);
-  });
+      const QRCodeReader = require('qrcode-reader');
+      const qr = new QRCodeReader();
+      qr.callback = (err, value) => {
+        if (err) {
+          return res.render('index', { success: null, error: 'Error scanning QR code', result: null, qrImage: null });
+        }
+        res.render('index', {
+          success: 'QR Code scanned successfully!',
+          error: null,
+          result: value.result, // QR code data
+          qrImage: imageUrl, // Image URL from ImageKit
+        });
+      };
+      qr.decode(image.bitmap);
+    });
+
+  } catch (err) {
+    console.error('Error uploading image:', err);
+    res.render('index', { success: null, error: 'Error uploading image', result: null, qrImage: null });
+  }
 });
-
-// Serve Static Files from /tmp
-app.use('/tmp', express.static('/tmp')); // This allows serving files directly from the /tmp folder
 
 // Start Server
 app.listen(port, () => {
